@@ -3,7 +3,7 @@
 #-----------------------------------------------------------------
 # author:   dawid.koszewski@nokia.com
 # date:     2019.10.28
-# update:   2019.11.19
+# update:   2019.11.21
 #-----------------------------------------------------------------
 
 #-----------------------------------------------------------------
@@ -37,12 +37,15 @@ PYTHON_MAJOR = sys.version_info[0]
 PYTHON_MINOR = sys.version_info[1]
 PYTHON_PATCH = sys.version_info[2]
 
-
 def printDetectedAndSupportedPythonVersion():
-    if ((PYTHON_MAJOR == 2 and PYTHON_MINOR >= 6) or (PYTHON_MAJOR == 3 and PYTHON_MINOR >= 4)):
-        print("detected python version: %d.%d.%d [SUPPORTED] (2.6, 2.7, >=3.4)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
+    if((PYTHON_MAJOR == 2 and PYTHON_MINOR == 6 and PYTHON_PATCH >= 6)
+    or (PYTHON_MAJOR == 2 and PYTHON_MINOR == 7 and PYTHON_PATCH >= 4)
+    or (PYTHON_MAJOR == 3 and PYTHON_MINOR == 4 and PYTHON_PATCH >= 5)
+    or (PYTHON_MAJOR == 3 and PYTHON_MINOR == 5 and PYTHON_PATCH >= 2)
+    or (PYTHON_MAJOR == 3 and PYTHON_MINOR >= 6)):
+        print("\ndetected python version: %d.%d.%d [SUPPORTED]" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
     else:
-        print("detected python version: %d.%d.%d [NOT OFFICIALLY SUPPORTED] (2.6, 2.7, >=3.4)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
+        print("\ndetected python version: %d.%d.%d [NOT TESTED]\n(it is highly recommended to upgrade to 2.6.6, 2.7.4, 3.4.5, 3.5.2 or any newer)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
 
 
 def getUnit(variable):
@@ -154,17 +157,18 @@ def getChecksum(pathToFile, fileMatcher):
                 print()
 
                 f.close()
+                checksum = checksum & 0xffffffff
+                fileNamePrepend = re.sub(fileMatcher, r'\1', pathToFile)
+                fileNameAppend = re.sub(fileMatcher, r'\4', pathToFile)
+                #checksumFormatted = '0x' + (hex(checksum)[2:].zfill(8)).upper() #in python 2.7.14 it appends letter L
+                checksumHex = "%x" % checksum
+                checksumFormatted = '0x' + ((checksumHex.zfill(8)).upper())
+                fileNameNew = fileNamePrepend + checksumFormatted + fileNameAppend
             except (OSError, IOError) as e:
                 print("\nCalculate checksum ERROR: %s - %s" % (e.filename, e.strerror))
             finally:
                 f.close()
-            checksum = checksum & 0xffffffff
-            #print("%d %s" % (checksum, (hex(checksum))))
 
-            fileNamePrepend = re.sub(fileMatcher, r'\1', pathToFile)
-            fileNameAppend = re.sub(fileMatcher, r'\4', pathToFile)
-            checksumNew = '0x' + (hex(checksum)[2:].zfill(8)).upper()
-            fileNameNew = fileNamePrepend + checksumNew + fileNameAppend
         except (Exception) as e:
             print ("\nCalculate checksum ERROR: %s" % (e))
     else:
@@ -174,14 +178,12 @@ def getChecksum(pathToFile, fileMatcher):
 
 def renameFile(pathToFile, pathToFileNew):
     try:
+        print('renaming to:\n%s\n' % (pathToFileNew))
         os.rename(pathToFile, pathToFileNew)
+        if not os.path.isfile(pathToFileNew) or not os.path.getsize(pathToFileNew) > 0:
+            print("Something went wrong. File not renamed correctly")
     except OSError as e:
         print("File rename ERROR: %s - %s.\n" % (e.filename, e.strerror))
-
-    if os.path.isfile(pathToFileNew) and os.path.getsize(pathToFileNew) > 0:
-        print('\nrenamed to:\n%s\n\n' % (pathToFileNew))
-    else:
-        print("Something went wrong. File not renamed correctly")
 
 
 def handleParameterPassedToScript(fileMatcher):
@@ -200,7 +202,7 @@ def handleParameterPassedToScript(fileMatcher):
         print("\nPath to file was not passed as first argument\n")
     time.sleep(1)
     sys.exit()
-    return ""
+    return "" #just in case
 
 
 def main():
