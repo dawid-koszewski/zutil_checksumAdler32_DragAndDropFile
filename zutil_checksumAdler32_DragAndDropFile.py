@@ -3,18 +3,20 @@
 #-----------------------------------------------------------------
 # author:   dawid.koszewski@nokia.com
 # date:     2019.10.28
-# update:   2019.12.08
+# update:   2019.12.14
 #-----------------------------------------------------------------
 
 #-----------------------------------------------------------------
 # HOW TO RUN SCRIPT in windows environment
 #-----------------------------------------------------------------
 #
-# You can add this script as Total Commander button (to simply select a file you want to rename and then click button)
+# You can simply drag and drop file onto this script...
+#
+# Or you can add this script as Total Commander button (to simply select a file you want to rename and then click on a button)
 #
 # 1. Click Configuration -> Buttor Bar
 # 2. Button bar: -> Add
-# 3. As Command: "python" and "path to this script" (for example: python C:\zutil_checksumAdler32_renameFilePassedAsParameter.py)
+# 3. As Command: "python" and "path to this script" (for example: python C:\zutil_checksumAdler32_DragAndDropFile.py)
 # 4. As Parameters: %P%N
 # 5. Click OK and you will see new button (you can also select new icon)
 # 6. Now simply select file containing checksum and then click on newly created button to rename file with newly calculated checksum
@@ -44,7 +46,6 @@ PYTHON_MINOR = sys.version_info[1]
 PYTHON_PATCH = sys.version_info[2]
 
 def printDetectedAndSupportedPythonVersion():
-    print("please do not hesitate to contact: dawid.koszewski@nokia.com")
     if((PYTHON_MAJOR == 2 and PYTHON_MINOR == 6 and PYTHON_PATCH >= 6)
     or (PYTHON_MAJOR == 2 and PYTHON_MINOR == 7 and PYTHON_PATCH >= 4)
     or (PYTHON_MAJOR == 3 and PYTHON_MINOR == 3 and PYTHON_PATCH >= 5)
@@ -56,7 +57,7 @@ def printDetectedAndSupportedPythonVersion():
         print("\ndetected python version: %d.%d.%d [PROBABLY SUPPORTED]\n(tested in 2.6.6, 2.7.4, 3.3.5, 3.8.0)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
     else:
         print("\ndetected python version: %d.%d.%d [NOT TESTED]\n(it is highly recommended to upgrade to 2.6.6, 2.7.4, 3.3.5, 3.8.0 or any newer)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
-    print("\n")
+    print("please do not hesitate to contact: dawid.koszewski@nokia.com\n\n")
 
 #-------------------------------------------------------------------------------
 
@@ -94,13 +95,9 @@ def pressCtrlCOrEnterToContinue():
     time.sleep(1)
 
 
-def renameFile(pathToFile, pathToFileNew):
+def renameFile(pathToFileOld, pathToFileNew):
     try:
-        os.rename(pathToFile, pathToFileNew)
-        if not os.path.isfile(pathToFileNew) or not os.path.getsize(pathToFileNew) > 0:
-            print("Something went wrong. File not renamed correctly")
-        else:
-            print('%s file renamed to:\n%s\n\n' % (pathToFile, pathToFileNew))
+        os.rename(pathToFileOld, pathToFileNew)
     except (OSError) as e:
         print("\nFile rename ERROR: renameFile(e1) %s - %s" % (e.filename, e.strerror))
         pressEnterToExit()
@@ -132,6 +129,19 @@ def getFileSize(pathToFile):
         fileSize = 1
     return fileSize
 
+
+def checkIfSymlinkAndGetRelativePath(pathToFile):
+    if os.path.islink(pathToFile):
+        pathtoDir = os.path.dirname(pathToFile)
+        pathInSymlink = os.readlink(pathToFile)
+        pathToFile = os.path.normpath(os.path.join(pathtoDir, pathInSymlink))
+#### OR simply:
+        #pathToFile = os.path.realpath(pathToFile)
+
+        if not os.path.isfile(pathToFile):
+            print("file that is being pointed to by symlink does not exist anymore: %s" % pathFromSymlink)
+    return pathToFile
+
 #-------------------------------------------------------------------------------
 
 
@@ -160,7 +170,7 @@ def getUnit(variable):
     return variable, variableUnit
 
 
-def printProgressBar(copied, fileSize, speedCurrent = 1048576.0, speedAverage = 1048576.0):
+def printProgressBar(copied, fileSize, speedCurrent = 1000000.0, speedAverage = 1000000.0):
     try:
         percent = (copied / (fileSize * 1.0)) # multiplication by 1.0 needed for python 2
         if percent > 1.0:
@@ -295,7 +305,7 @@ def initProgressBarVariables():
         progressBarVars = [1.0] * 10
 
         timeStarted = time.time()
-        data_step = 131072
+        data_step = 256*1024
         dataMark = 0
 
         time_step = 1.0
@@ -303,8 +313,8 @@ def initProgressBarVariables():
         timeMarkData = 0
         timeNow = 0.0
         timeNowData = 0
-        speedCurrent = 1048576.0
-        speedAverage = 1048576.0
+        speedCurrent = 1000*1000.0
+        speedAverage = 1000*1000.0
 
         progressBarVars[0] = timeStarted
         progressBarVars[1] = data_step
@@ -355,7 +365,7 @@ def getChecksum(pathToFile):
                 progressBarVars = initProgressBarVariables()
 
                 while 1:
-                    buffer = f.read(1024*1024) #default 64*1024 for linux
+                    buffer = f.read(1024*1024) #default 64*1024 for linux (SLOW), 1024*1024 for windows (FAST also on linux)
                     if not buffer:
                         break
                     checksum = zlib.adler32(buffer, checksum)
@@ -373,7 +383,7 @@ def getChecksum(pathToFile):
         except (Exception) as e:
             print ("\nCalculate checksum ERROR: getChecksum(e2) %s" % (e))
     else:
-        print('\nERROR: getChecksum(e3) Could not find new stratix image file to calculate checksum')
+        print('\nERROR: getChecksum(e3) Could not find file to calculate checksum')
     return checksum
 
 #-------------------------------------------------------------------------------
@@ -404,8 +414,10 @@ def handleParameterPassedToScript(fileMatcherChecksumStrict, fileMatcherChecksum
         pathToFile = sys.argv[1]
         pathToFileNew = ""
         print('file passed to script:\n%s' % (pathToFile))
-        print('modified: %s\n' % (getLastModificationTimeAsString(pathToFile)))
+        pathToFile = checkIfSymlinkAndGetRelativePath(pathToFile)
+
         if os.path.isfile(pathToFile):
+            print('modified: %s\n' % (getLastModificationTimeAsString(pathToFile)))
             checksum = getChecksum(pathToFile)
             checksumAsHex = getChecksumAsHex(checksum)
             print("adler32 checksum: %d (0x%s)\n" % (checksum, checksumAsHex))
@@ -419,7 +431,7 @@ def handleParameterPassedToScript(fileMatcherChecksumStrict, fileMatcherChecksum
                 if matchRelaxedResult:
                     pathToFileNew = getPathToFileNew(pathToFile, fileName, fileMatcherChecksumRelaxed, checksumAsHex)
                 else:
-                    print('\nERROR: If you want to rename file - please select file containing checksum in its name\n')
+                    print('\nERROR: If you want to rename file - please select a file containing checksum in its name\n')
                     pressEnterToExit()
         else:
             print('\nERROR: please select existing file\n')
@@ -444,7 +456,10 @@ def main():
 
     pathToFile, pathToFileNew = handleParameterPassedToScript(fileMatcherChecksumStrict, fileMatcherChecksumRelaxed)
     renameFile(pathToFile, pathToFileNew)
-
+    if not os.path.isfile(pathToFileNew) or not os.path.getsize(pathToFileNew) > 0:
+        print("Something went wrong. File not renamed correctly")
+    else:
+        print('%s file renamed to:\n%s\n\n' % (pathToFile, pathToFileNew))
 
 
 if __name__ == '__main__':
