@@ -21,36 +21,34 @@ import subprocess
 if len(sys.argv) == 3:
     path_to_zutil = sys.argv[2]
 
-filename = sys.argv[1]
+filePath = sys.argv[1]
+print('file path passed to script:\n%s\n' % (filePath))
+filename = os.path.basename(filePath)
 
-print('filename passed to script:\n%s\n' % (filename))
-time.sleep(1)
 
-if re.search('SRM-rfsw-image-install_z-uber-', filename):
-    filenamePrepend = 'SRM-rfsw-image-install_z-uber-0x'
-    filenameAppend = '.tar'
+if os.path.isfile(filePath):
+    if re.search(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', filename):
 
-    output = subprocess.check_output('%s adler32 %s' % (path_to_zutil, filename)).decode(sys.stdout.encoding).strip()
-    print('zutil output:\n%s\n' % (output))
+        zutilOutput = subprocess.check_output('%s adler32 %s' % (path_to_zutil, filePath)).decode(sys.stdout.encoding).strip()
+        print('zutil output:\n%s\n' % (zutilOutput))
 
-    checksum = re.sub(r'.*(\()(0x)([a-fA-F0-9]{8})(\))', r'\3', output).upper()
-    #print('calculated checksum: %s\n' % (checksum))
-    time.sleep(1)
+        filenamePrepend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\1', filename)
+        filenameAppend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\4', filename)
+        checksumNew = re.sub(r'.*(\()(0x)([a-fA-F0-9]{8})(\))', r'\3', zutilOutput).upper()
+        filePathNew = os.path.dirname(filePath) + '\\' + filenamePrepend + '0x' + checksumNew + filenameAppend
 
-    filenameNew = os.path.dirname(filename) + '\\' + filenamePrepend + checksum + filenameAppend
+        os.rename(filePath, filePathNew)
 
-    if os.path.isfile(filename) :
-        os.rename(filename, filenameNew)
-    else:
-        print('failed to rename file')
-
-    if os.path.isfile(filenameNew) and os.path.getsize(filenameNew) > 0:
-        print('new filename:\n%s\n' % (filenameNew))
+        if os.path.isfile(filePathNew) and os.path.getsize(filePathNew) > 0:
+            print('new file path:\n%s\n' % (filePathNew))
+            print ('\n\n\n/============================================\\\n|                                            |\n|                                            |\n|------- FILE RENAMED SUCCESSFULLY!!! -------|\n|                                            |\n|                                            |\n\\============================================/\n\n')
         time.sleep(1)
-        print ('\n\n\n/============================================\\\n|                                            |\n|                                            |\n|------- FILE RENAMED SUCCESSFULLY!!! -------|\n|                                            |\n|                                            |\n\\============================================/\n\n')
+
+    else:
+        print('\nERROR: please select proper file containing checksum in its name\n')
+        time.sleep(3)
+else:
+    print('\nERROR: please select existing file\n')
     time.sleep(3)
 
-else:
-    print('\nERROR: select proper SRM image file\n')
-    time.sleep(3)
-    sys.exit()
+sys.exit()
