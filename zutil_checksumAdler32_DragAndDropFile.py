@@ -3,7 +3,7 @@
 #-----------------------------------------------------------------
 # author:   dawid.koszewski@nokia.com
 # date:     2019.10.28
-# update:   2019.11.15
+# update:   2019.11.19
 #-----------------------------------------------------------------
 
 #-----------------------------------------------------------------
@@ -31,6 +31,18 @@ try:
     import zlib
 except (ImportError, Exception) as e:
     print("\n%s\n" % e)
+
+
+PYTHON_MAJOR = sys.version_info[0]
+PYTHON_MINOR = sys.version_info[1]
+PYTHON_PATCH = sys.version_info[2]
+
+
+def printDetectedAndSupportedPythonVersion():
+    if ((PYTHON_MAJOR == 2 and PYTHON_MINOR >= 6) or (PYTHON_MAJOR == 3 and PYTHON_MINOR >= 4)):
+        print("detected python version: %d.%d.%d [SUPPORTED] (2.6, 2.7, >=3.4)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
+    else:
+        print("detected python version: %d.%d.%d [NOT OFFICIALLY SUPPORTED] (2.6, 2.7, >=3.4)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
 
 
 def getUnit(variable):
@@ -192,6 +204,8 @@ def handleParameterPassedToScript(fileMatcher):
 
 
 def main():
+    printDetectedAndSupportedPythonVersion()
+
     fileMatcher = r'(.*)(0x)([a-fA-F0-9]{1,8})(.*)'
     pathToFile = handleParameterPassedToScript(fileMatcher)
     fileNameNew = getChecksum(pathToFile, fileMatcher)
