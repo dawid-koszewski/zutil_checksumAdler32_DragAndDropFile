@@ -5,50 +5,82 @@
 # date:     2019.10.28
 #-----------------------------------------------------------------
 
-#-----------------------------------------------------------------
-# set absolute path to your zutil or pass it as second parameter to this script
-#-----------------------------------------------------------------
-path_to_zutil = 'C:\zutil\zutil.exe'
-
-
 import sys
 import re
 import os
 import time
 import subprocess
+import zlib
 
 
-if len(sys.argv) == 3:
-    path_to_zutil = sys.argv[2]
+def getLastModificationTime(pathToFile):
+    secondsSinceEpoch = 0
+    try:
+        secondsSinceEpoch = os.path.getmtime(pathToFile)
+    except OSError as e:
+        print("Getting file info ERROR: %s - %s.\n" % (e.filename, e.strerror))
+    return secondsSinceEpoch
 
-filePath = sys.argv[1]
-print('file path passed to script:\n%s\n' % (filePath))
-filename = os.path.basename(filePath)
+
+def getLastModificationTimeAsString(pathToFile):
+    return time.ctime(getLastModificationTime(pathToFile))
 
 
-if os.path.isfile(filePath):
-    if re.search(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', filename):
+def getChecksum(pathToFile):
+    fileNameNew = ""
+    if os.path.isfile(pathToFile):
+        f = open(pathToFile, 'rb')
+        checksum = 1
+        buffer = f.read(1024)
+        while buffer: #len(buffer) > 0:
+            checksum = zlib.adler32(buffer, checksum)
+            buffer = f.read(1024)
+        f.close()
 
-        zutilOutput = subprocess.check_output('%s adler32 %s' % (path_to_zutil, filePath)).decode(sys.stdout.encoding).strip()
-        print('zutil output:\n%s\n' % (zutilOutput))
+        checksum = checksum & 0xffffffff
+        #print("%d %s" % (checksum, (hex(checksum))))
 
-        filenamePrepend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\1', filename)
-        filenameAppend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\4', filename)
-        checksumNew = re.sub(r'.*(\()(0x)([a-fA-F0-9]{8})(\))', r'\3', zutilOutput).upper()
-        filePathNew = os.path.dirname(filePath) + '\\' + filenamePrepend + '0x' + checksumNew + filenameAppend
-
-        os.rename(filePath, filePathNew)
-
-        if os.path.isfile(filePathNew) and os.path.getsize(filePathNew) > 0:
-            print('new file path:\n%s\n' % (filePathNew))
-            print ('\n\n\n/============================================\\\n|                                            |\n|                                            |\n|------- FILE RENAMED SUCCESSFULLY!!! -------|\n|                                            |\n|                                            |\n\\============================================/\n\n')
-        time.sleep(1)
-
+        fileNamePrepend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\1', pathToFile)
+        fileNameAppend = re.sub(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', r'\4', pathToFile)
+        checksumNew = re.sub(r'.*(0x)([a-fA-F0-9]{8}).*', r'\2', hex(checksum)).upper()
+        fileNameNew = fileNamePrepend + '0x' + checksumNew + fileNameAppend
     else:
-        print('\nERROR: please select proper file containing checksum in its name\n')
-        time.sleep(3)
-else:
-    print('\nERROR: please select existing file\n')
-    time.sleep(3)
+        print('\nERROR: Could not find new stratix image file to calculate checksum\n')
+    return fileNameNew
 
-sys.exit()
+
+def renameFile(pathToFile, pathToFileNew):
+    try:
+        os.rename(pathToFile, pathToFileNew)
+    except OSError as e:
+        print("File rename ERROR: %s - %s.\n" % (e.filename, e.strerror))
+
+    if os.path.isfile(pathToFileNew) and os.path.getsize(pathToFileNew) > 0:
+        print('\n\n\n === new Stratix file ===\n\n%s\n' % (pathToFileNew))
+        print(' --- file last modified: %s ---\n' % (getLastModificationTimeAsString(pathToFileNew)))
+        print('\n/============================================\\\n|                                            |\n|                                            |\n|------- FILE CREATED SUCCESSFULLY!!! -------|\n|                                            |\n|                                            |\n\\============================================/\n\n')
+    else:
+        print("Something went wrong. New Stratix file not generated correctly")
+
+
+def main():
+    pathToFile = sys.argv[1]
+    print('file path passed to script:\n%s\n' % (pathToFile))
+    if os.path.isfile(pathToFile):
+        fileName = os.path.basename(pathToFile)
+        pathToDir = os.path.dirname(pathToFile)
+        if re.search(r'(.*)(0x)([a-fA-F0-9]{8})(.*)', fileName):
+            fileNameNew = getChecksum(pathToFile)
+            renameFile(pathToFile, os.path.join(pathToDir, fileNameNew))
+        else:
+            print('\nERROR: please select proper file containing checksum in its name\n')
+            time.sleep(3)
+    else:
+        print('\nERROR: please select existing file\n')
+        time.sleep(3)
+
+
+if __name__ == '__main__':
+    main()
+    time.sleep(3)
+    sys.exit()
