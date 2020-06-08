@@ -3,7 +3,7 @@
 #-----------------------------------------------------------------
 # author:   dawid.koszewski@nokia.com
 # date:     2019.10.28
-# update:   2019.12.14
+# update:   2019.12.16
 #-----------------------------------------------------------------
 
 #-----------------------------------------------------------------
@@ -28,11 +28,7 @@ import re
 import stat
 import sys
 import time
-
-try:
-    import zlib
-except (ImportError, Exception) as e:
-    print("\n%s\n" % e)
+#import zlib    #imported below in try except block
 
 #-------------------------------------------------------------------------------
 
@@ -58,6 +54,59 @@ def printDetectedAndSupportedPythonVersion():
     else:
         print("\ndetected python version: %d.%d.%d [NOT TESTED]\n(it is highly recommended to upgrade to 2.6.6, 2.7.4, 3.3.5, 3.8.0 or any newer)" % (PYTHON_MAJOR, PYTHON_MINOR, PYTHON_PATCH))
     print("please do not hesitate to contact: dawid.koszewski@nokia.com\n\n")
+
+printDetectedAndSupportedPythonVersion()
+
+#-------------------------------------------------------------------------------
+
+
+#===============================================================================
+# python implementation of zlib.adler32 library
+#===============================================================================
+
+def adler32(buffer, checksum): #probably the Fastest pure Python Adler32 in the West (FPAW)
+    sum2 = (checksum >> 16) & 0xffff;
+    adler = checksum & 0xffff;
+
+    # step = 256 #256 max for adler-=65521 version (256*255+1 = 65281 so adler modulo can be skipped)
+    # i = 0
+    buffer = bytearray(buffer)
+    for byte in buffer:
+        adler += byte
+        sum2 += adler
+        # i += 1
+        # if i>= step:
+            # # if adler >= 65521:
+                # # adler -= 65521
+            # adler %= 65521
+            # sum2 %= 65521
+            # i = 0
+    # # if adler >= 65521:
+        # # adler -= 65521
+    adler %= 65521
+    sum2 %= 65521
+
+    return (sum2 << 16) | adler
+
+
+def adler32_naive(buffer, checksum):
+    sum2 = (checksum >> 16) & 0xffff;
+    adler = checksum & 0xffff;
+    buffer = bytearray(buffer)
+    for byte in buffer:
+        adler = (adler + byte) % 65521
+        sum2 = (sum2 + adler) % 65521
+    return (sum2 << 16) | adler
+
+
+adler32_function = adler32
+
+try:
+    import zlib
+    adler32_function = zlib.adler32
+except (ImportError, Exception) as e:
+    print("\nWARNING: %s\nscript will use python implementation of adler32 algorithm..." % e)
+    adler32_function = adler32
 
 #-------------------------------------------------------------------------------
 
@@ -368,7 +417,7 @@ def getChecksum(pathToFile):
                     buffer = f.read(1024*1024) #default 64*1024 for linux (SLOW), 1024*1024 for windows (FAST also on linux)
                     if not buffer:
                         break
-                    checksum = zlib.adler32(buffer, checksum)
+                    checksum = adler32_function(buffer, checksum)
 
                     handleProgressBarWithinLoop(progressBarVars, buffer, fileSize)
                 printProgressBar(progressBarVars[7], fileSize, progressBarVars[8], progressBarVars[9])
@@ -449,7 +498,6 @@ def handleParameterPassedToScript(fileMatcherChecksumStrict, fileMatcherChecksum
 #===============================================================================
 
 def main():
-    printDetectedAndSupportedPythonVersion()
 
     fileMatcherChecksumStrict = re.compile(r'(.*0x)([a-fA-F0-9]{8})(.*)')
     fileMatcherChecksumRelaxed = re.compile(r'(.*)([a-fA-F0-9]{8})(.*)')
